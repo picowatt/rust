@@ -1042,7 +1042,7 @@ impl<'a, 'tcx> FnType<'tcx> {
         }
     }
 
-    pub fn apply_attrs_callsite(&self, callsite: ValueRef) {
+    pub fn apply_attrs_callsite(&self, bx: &Builder<'a, 'tcx>, callsite: ValueRef) {
         let mut i = 0;
         let mut apply = |attrs: &ArgAttributes| {
             attrs.apply_callsite(llvm::AttributePlace::Argument(i), callsite);
@@ -1054,6 +1054,27 @@ impl<'a, 'tcx> FnType<'tcx> {
             }
             PassMode::Indirect(ref attrs) => apply(attrs),
             _ => {}
+        }
+        if let layout::Abi::Scalar(ref scalar) = self.ret.layout.abi {
+            let (min, max) = (scalar.valid_range.start, scalar.valid_range.end);
+            let max_next = max.wrapping_add(1);
+            let bits = scalar.value.size(bx.cx).bits();
+            assert!(bits <= 128);
+            let mask = !0u128 >> (128 - bits);
+            // For a (max) value of -1, max will be `-1 as usize`, which overflows.
+            // However, that is fine here (it would still represent the full range),
+            // i.e., if the range is everything.  The lo==hi case would be
+            // rejected by the LLVM verifier (it would mean either an
+            // empty set, which is impossible, or the entire range of the
+            // type, which is pointless).
+            match scalar.value {
+                layout::Int(..) if !scalar.is_bool() && max_next & mask != min & mask => {
+                    // llvm::ConstantRange can deal with ranges that wrap around,
+                    // so an overflow on (max + 1) is fine.
+                    bx.range_metadata(callsite, min..max_next);
+                }
+                _ => {}
+            }
         }
         for arg in &self.args {
             if arg.pad.is_some() {
