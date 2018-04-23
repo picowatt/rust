@@ -1056,20 +1056,16 @@ impl<'a, 'tcx> FnType<'tcx> {
             _ => {}
         }
         if let layout::Abi::Scalar(ref scalar) = self.ret.layout.abi {
-            let range = scalar.range_metadata(bx.cx);
-            // The lo==hi case would be rejected by the LLVM verifier
-            // (it would mean either an empty set, which is impossible, or the
-            // entire range of the type, which is pointless).
-            //
-            // If the value is a boolean, the range is 0..2 and that ultimately
-            // become 0..0 when the type becomes i1.
-            match scalar.value {
-                layout::Int(..) if !scalar.is_bool() && range.start != range.end => {
-                    // llvm::ConstantRange can deal with ranges that wrap around,
-                    // so an overflow on (max + 1) is fine.
-                    bx.range_metadata(callsite, range);
+            if let Some(range) = scalar.range_metadata(bx.cx) {
+                // If the value is a boolean, the range is 0..2 and that ultimately
+                // become 0..0 when the type becomes i1, which would be rejected
+                // by the LLVM verifier.
+                match scalar.value {
+                    layout::Int(..) if !scalar.is_bool() => {
+                        bx.range_metadata(callsite, range);
+                    }
+                    _ => {}
                 }
-                _ => {}
             }
         }
         for arg in &self.args {

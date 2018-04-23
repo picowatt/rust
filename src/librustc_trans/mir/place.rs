@@ -91,20 +91,16 @@ impl<'a, 'tcx> PlaceRef<'tcx> {
         }
 
         let scalar_load_metadata = |load, scalar: &layout::Scalar| {
-            let range = scalar.range_metadata(bx.cx);
-            // The lo==hi case would be rejected by the LLVM verifier
-            // (it would mean either an empty set, which is impossible, or the
-            // entire range of the type, which is pointless).
-            match scalar.value {
-                layout::Int(..) if range.start != range.end => {
-                    // llvm::ConstantRange can deal with ranges that wrap around,
-                    // so an overflow on (max + 1) is fine.
-                    bx.range_metadata(load, range);
+            if let Some(range) = scalar.range_metadata(bx.cx) {
+                match scalar.value {
+                    layout::Int(..) => {
+                        bx.range_metadata(load, range);
+                    }
+                    layout::Pointer if 0 < range.start && range.start < range.end => {
+                        bx.nonnull_metadata(load);
+                    }
+                    _ => {}
                 }
-                layout::Pointer if 0 < range.start && range.start < range.end => {
-                    bx.nonnull_metadata(load);
-                }
-                _ => {}
             }
         };
 
