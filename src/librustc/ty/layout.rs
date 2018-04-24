@@ -23,7 +23,7 @@ use std::fmt;
 use std::i128;
 use std::iter;
 use std::mem;
-use std::ops::{Add, Sub, Mul, AddAssign, Deref, RangeInclusive};
+use std::ops::{Add, Sub, Mul, AddAssign, Deref, Range, RangeInclusive};
 
 use ich::StableHashingContext;
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher,
@@ -647,6 +647,25 @@ impl Scalar {
         } else {
             false
         }
+    }
+
+    /// Returns a range suitable to be passed to LLVM for range metadata.
+    pub fn range_metadata<C: HasDataLayout>(&self, cx: C) -> Option<Range<u128>> {
+        // For a (max) value of -1, max will be `-1 as usize`, which overflows.
+        // However, that is fine here (it would still represent the full range),
+        // i.e., if the range is everything.
+        let bits = self.value.size(cx).bits();
+        assert!(bits <= 128);
+        let mask = !0u128 >> (128 - bits);
+        let start = self.valid_range.start;
+        let end = self.valid_range.end.wrapping_add(1);
+        if start & mask == end & mask {
+            // The lo==hi case would be rejected by the LLVM verifier
+            // (it would mean either an empty set, which is impossible, or the
+            // entire range of the type, which is pointless).
+            return None;
+        }
+        Some(start..end)
     }
 }
 

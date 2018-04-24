@@ -1042,7 +1042,7 @@ impl<'a, 'tcx> FnType<'tcx> {
         }
     }
 
-    pub fn apply_attrs_callsite(&self, callsite: ValueRef) {
+    pub fn apply_attrs_callsite(&self, bx: &Builder<'a, 'tcx>, callsite: ValueRef) {
         let mut i = 0;
         let mut apply = |attrs: &ArgAttributes| {
             attrs.apply_callsite(llvm::AttributePlace::Argument(i), callsite);
@@ -1054,6 +1054,23 @@ impl<'a, 'tcx> FnType<'tcx> {
             }
             PassMode::Indirect(ref attrs) => apply(attrs),
             _ => {}
+        }
+        if let layout::Abi::Scalar(ref scalar) = self.ret.layout.abi {
+            // If the value is a boolean, the range is 0..2 and that ultimately
+            // become 0..0 when the type becomes i1, which would be rejected
+            // by the LLVM verifier.
+            match scalar.value {
+                layout::Int(..) if !scalar.is_bool() => {
+                    if let Some(range) = scalar.range_metadata(bx.cx) {
+                        // FIXME(nox): This causes very weird type errors about
+                        // SHL operators in constants in stage 2 with LLVM 3.9.
+                        if unsafe { llvm::LLVMRustVersionMajor() >= 4 } {
+                            bx.range_metadata(callsite, range);
+                        }
+                    }
+                }
+                _ => {}
+            }
         }
         for arg in &self.args {
             if arg.pad.is_some() {
