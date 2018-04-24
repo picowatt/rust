@@ -1062,7 +1062,11 @@ impl<'a, 'tcx> FnType<'tcx> {
             match scalar.value {
                 layout::Int(..) if !scalar.is_bool() => {
                     if let Some(range) = scalar.range_metadata(bx.cx) {
-                        bx.range_metadata(callsite, range);
+                        // FIXME(nox): This causes very weird type errors about
+                        // SHL operators in constants in stage 2 with LLVM 3.9.
+                        if unsafe { llvm::LLVMRustVersionMajor() >= 4 } {
+                            bx.range_metadata(callsite, range);
+                        }
                     }
                 }
                 _ => {}
