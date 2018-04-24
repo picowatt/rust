@@ -91,16 +91,17 @@ impl<'a, 'tcx> PlaceRef<'tcx> {
         }
 
         let scalar_load_metadata = |load, scalar: &layout::Scalar| {
-            if let Some(range) = scalar.range_metadata(bx.cx) {
-                match scalar.value {
-                    layout::Int(..) => {
+            match scalar.value {
+                layout::Int(..) => {
+                    if let Some(range) = scalar.range_metadata(bx.cx) {
                         bx.range_metadata(load, range);
                     }
-                    layout::Pointer if 0 < range.start && range.start < range.end => {
-                        bx.nonnull_metadata(load);
-                    }
-                    _ => {}
                 }
+                layout::Pointer
+                if (1..scalar.valid_range.end).contains(&scalar.valid_range.start) => {
+                    bx.nonnull_metadata(load);
+                }
+                _ => {}
             }
         };
 

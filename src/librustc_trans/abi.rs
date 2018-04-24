@@ -1056,16 +1056,16 @@ impl<'a, 'tcx> FnType<'tcx> {
             _ => {}
         }
         if let layout::Abi::Scalar(ref scalar) = self.ret.layout.abi {
-            if let Some(range) = scalar.range_metadata(bx.cx) {
-                // If the value is a boolean, the range is 0..2 and that ultimately
-                // become 0..0 when the type becomes i1, which would be rejected
-                // by the LLVM verifier.
-                match scalar.value {
-                    layout::Int(..) if !scalar.is_bool() => {
+            // If the value is a boolean, the range is 0..2 and that ultimately
+            // become 0..0 when the type becomes i1, which would be rejected
+            // by the LLVM verifier.
+            match scalar.value {
+                layout::Int(..) if !scalar.is_bool() => {
+                    if let Some(range) = scalar.range_metadata(bx.cx) {
                         bx.range_metadata(callsite, range);
                     }
-                    _ => {}
                 }
+                _ => {}
             }
         }
         for arg in &self.args {
